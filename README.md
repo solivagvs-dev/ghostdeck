@@ -77,6 +77,7 @@ No configuration is required to start. On first run GhostDeck writes `/var/lib/g
 | `REGISTRATION_TOKEN` | empty | Invite code for `/register`. **Empty leaves signup open to anyone who can reach the dashboard.** |
 | `PROJECT_NETWORK_ISOLATION` | `true` | One Docker network per project. `false` puts every workspace on the shared network. |
 | `DOCKER_NETWORK` | `ghostdeck-net` | Base network name. Per-project networks are `<name>-p<id>`. |
+| `ALLOW_SHARED_NETWORK` | `true` | Let owners put their own workspaces on a shared network so they can reach each other. |
 | `PROJECT_UNCONFINED` | `false` | Runs workspaces with `seccomp=unconfined`. Only needed if an image will not start otherwise. |
 | `CADDY_HTTP_BIND` | `80` | Host port for HTTP. `off` disables it. `127.0.0.1:8080` binds one address. |
 | `CADDY_HTTPS_BIND` | `443` | Host port for HTTPS, same syntax. |
@@ -96,6 +97,8 @@ Admins manage every account and workspace from `/admin/`, including reassigning 
 ## Workspace Isolation
 
 Each project container runs on its own Docker bridge network, `<DOCKER_NETWORK>-p<project-id>`. Only the managed Caddy container is attached to every project network, so one workspace cannot reach another workspace's container directly; reaching one through Caddy requires a session that owns it.
+
+Workspaces are isolated from each other unless their owner puts them on a shared network. A shared network is an opt-in second network, toggled per workspace from its settings page, that lets one owner's workspaces reach each other by name — two machines on one bench. Shared networks never span accounts, and joining or leaving takes effect without restarting the workspace. `ALLOW_SHARED_NETWORK=false` removes the feature.
 
 Isolation applies between workspaces only. Every workspace keeps normal outbound access to the internet, the host's LAN and ports published on the host. Kali workspaces run with `NET_ADMIN` and `NET_RAW`, and Ubuntu Webtop runs with `apparmor=unconfined`.
 
