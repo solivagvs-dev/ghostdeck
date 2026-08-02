@@ -14,6 +14,12 @@ GhostDeck manages the workspace containers through the Docker socket and serves 
 - HTTPS out of the box through a managed Caddy container, including internal certificates for lab hostnames.
 - Stop, resume, repull and delete from the dashboard; workspace home directories persist across restarts.
 
+## Demo
+
+One run against an empty install: registering an account, creating Firefox, Kali and Ubuntu workspaces, opening two of them until the desktop connects, putting Kali and Ubuntu on a shared network, then an admin moving every workspace to a second account and deleting the emptied one.
+
+![A full GhostDeck session, from registration through workspaces to admin handover](docs/img/ghostdeck-demo.gif)
+
 ## Install — Debian / Ubuntu
 
 Download the package for your architecture from [Releases](https://github.com/solivagvs-dev/ghostdeck/releases/latest), verify it, and install:
