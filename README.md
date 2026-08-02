@@ -1,12 +1,5 @@
 # GhostDeck
 
-<!--
-Source of truth for the README of github.com/solivagvs-dev/ghostdeck.
-The Configuration table and the Workspace Isolation section are kept
-identical to packaging/docs/dockerhub.md — change both together.
-The three images live at docs/img/ in that repository.
--->
-
 Self-hosted dashboard for disposable browser, messenger, Kali and Ubuntu workspaces. Create a workspace from a web form, use it in a browser tab, throw it away.
 
 GhostDeck manages the workspace containers through the Docker socket and serves the dashboard and every workspace through a managed Caddy container with HTTPS. Workspaces need no host ports and no VNC client.
@@ -68,7 +61,7 @@ docker compose up -d
 sudo cat /var/lib/ghostdeck/.initial-admin-password
 ```
 
-Images are published as `solivagvs/ghostdeck:latest` and `:<version>` (multi-arch manifests for `linux/amd64` and `linux/arm64`), plus single-architecture `:<version>-amd64` and `:<version>-arm64`.
+Images are published on [Docker Hub](https://hub.docker.com/r/solivagvs/ghostdeck) as `solivagvs/ghostdeck:latest` and `:<version>` (multi-arch manifests for `linux/amd64` and `linux/arm64`), plus single-architecture `:<version>-amd64` and `:<version>-arm64`.
 
 No configuration is required to start. On first run GhostDeck writes `/var/lib/ghostdeck/.env` with a generated `APP_SECRET`, a generated admin password and every default below. That file is never rewritten afterwards; environment variables set on the service or container override it.
 
@@ -120,4 +113,8 @@ Bug reports and questions: [Issues](https://github.com/solivagvs-dev/ghostdeck/i
 
 ## Licensing
 
-GhostDeck is not open source. This repository distributes the packaged builds and their documentation; the source is not published. <!-- State here what recipients may do with the binaries: personal/internal use, redistribution, and any warranty disclaimer. -->
+GhostDeck is not open source. This repository distributes the packaged builds and their documentation; the source is not published.
+
+You may download, install and use GhostDeck free of charge for personal and internal business purposes. Redistribution of the packages, modified or unmodified, is not permitted without written permission.
+
+GhostDeck is provided as-is, without warranty of any kind, express or implied. The author accepts no liability for any damages arising from its use. Note that GhostDeck requires access to the Docker socket, which is equivalent to root on the host it runs on.
