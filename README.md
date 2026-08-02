@@ -93,10 +93,81 @@ No configuration is required to start. On first run GhostDeck writes `/var/lib/g
 | `MAX_PROJECTS_PER_USER` | `0` | Cap on workspaces per account. `0` means no limit. |
 | `CADDY_HTTP_BIND` | `80` | Host port for HTTP. `off` disables it. `127.0.0.1:8080` binds one address. |
 | `CADDY_HTTPS_BIND` | `443` | Host port for HTTPS, same syntax. |
+| `CADDY_HTTPS_SITE_ADDRESS` | `:443` | Site address for HTTPS. A hostname pins the site to that name; `:443` serves any name. |
+| `CADDY_TLS_INTERNAL` | `true` when HTTPS is bound | Issue certificates from Caddy's internal CA. `false` switches to ACME. |
+| `CADDY_TLS_ON_DEMAND` | on for `:443`-style addresses | Issue internal certificates on first request for whatever hostname arrives. |
+| `CADDY_TLS_CERT_FILE` | empty | Host path to a certificate to serve instead of issuing one. Requires `CADDY_TLS_KEY_FILE`. |
+| `CADDY_TLS_KEY_FILE` | empty | Host path to the matching private key. |
+| `COOKIE_SECURE` | `true` when HTTPS is bound | `Secure` on session cookies, and `Strict-Transport-Security`. Set it manually when TLS is terminated elsewhere. |
 | `TRUSTED_PROXIES` | none | CIDRs whose `X-Forwarded-For` is trusted, so login rate limits see the real client address. |
 | `PUID` / `PGID` | `1000` | uid and gid owning workspace files. |
 | `TZ` | `Europe/Berlin` | Workspace timezone. |
 | `IMAGE_<NAME>_ENABLED` | `true` | Catalog toggles: `FIREFOX`, `BRAVE`, `CHROME`, `CHROMIUM`, `TELEGRAM`, `SIGNAL`, `UBUNTU`, `KALI`. |
+
+## TLS
+
+Caddy terminates TLS. `CADDY_HTTPS_SITE_ADDRESS` names the site and `CADDY_TLS_INTERNAL` decides who issues the certificate; package and container installs write both to `/var/lib/ghostdeck/.env` as `:443` and `true`.
+
+| Deployment | Settings | Certificate from |
+| --- | --- | --- |
+| Internal network, any hostname (default) | `CADDY_HTTPS_SITE_ADDRESS=:443`, `CADDY_TLS_INTERNAL=true` | Caddy's internal CA, issued on demand per hostname |
+| Internal network, one fixed hostname | `CADDY_HTTPS_SITE_ADDRESS=ghostdeck.company.lab` | Caddy's internal CA, that name only |
+| Public DNS name, inbound 80/443 | `CADDY_HTTPS_SITE_ADDRESS=ghostdeck.example.com`, `CADDY_TLS_INTERNAL=false` | Let's Encrypt or ZeroSSL over ACME |
+| A certificate you already hold — organisation CA, wildcard, or one issued out of band for a name with no inbound reachability | `CADDY_TLS_CERT_FILE`, `CADDY_TLS_KEY_FILE` | the files you supply |
+| TLS already terminated by something in front | `CADDY_HTTPS_BIND=off` | that proxy |
+
+### Internal CA
+
+Browsers warn until Caddy's root is trusted on each client:
+
+```bash
+docker cp ghostdeck-caddy:/data/caddy/pki/authorities/local/root.crt .
+```
+
+The root lives in the `ghostdeck-caddy-data` volume, so it survives container recreation and is trusted once per client.
+
+`:443` keeps on-demand issuance, so any hostname resolving to the host is served. A named site turns that off — `CADDY_TLS_ON_DEMAND` defaults on only for `:443`-style addresses — so requests arriving under any other name, including the bare IP, match no site. Several names can be listed comma separated: `a.company.lab, b.company.lab`.
+
+### ACME
+
+`CADDY_TLS_INTERNAL=false` drops the internal CA and Caddy requests a publicly trusted certificate for the site name. That needs the name in public DNS and inbound reachability on 80 for HTTP-01 or 443 for TLS-ALPN-01; Caddy answers the HTTP-01 challenge on port 80 itself, ahead of the HTTP-to-HTTPS redirect. Names no public CA can validate, `.lab` and `.internal` among them, fail issuance and HTTPS never comes up.
+
+### Your own certificate
+
+Point GhostDeck at a certificate and key on the Docker host:
+
+```env
+CADDY_HTTPS_SITE_ADDRESS=ghostdeck.company.lab
+CADDY_TLS_CERT_FILE=/etc/ssl/ghostdeck/ghostdeck.crt
+CADDY_TLS_KEY_FILE=/etc/ssl/ghostdeck/ghostdeck.key
+```
+
+Both must be set, and `CADDY_HTTPS_BIND` must be on; GhostDeck refuses to start otherwise rather than serving plain HTTP under a configuration that looks like TLS. A supplied certificate takes precedence over `CADDY_TLS_INTERNAL=true`, which every generated `.env` already carries, so that line does not have to be changed.
+
+Both values name a **file**, not the directory holding it, and both are paths on the Docker host — as with `/var/lib/ghostdeck`, they stay host paths for container installs, because GhostDeck creates the Caddy container through the host Docker daemon.
+
+GhostDeck mounts the directory each file sits in, read-only, at `/tls/cert` and `/tls/key`, and references the file by name inside it. Mounting the directory rather than the file is what makes a renewal that replaces the file visible to the running container, but it does expose everything alongside it read-only to Caddy, so keep the pair in a directory that holds nothing else. Changing or removing either variable recreates the Caddy container on the next start.
+
+Caddy reads the files when it loads its configuration, so restart GhostDeck after renewal:
+
+```bash
+sudo systemctl restart ghostdeck   # or: docker restart ghostdeck
+```
+
+Certificates issued over DNS-01 belong here too. GhostDeck cannot run that challenge itself — stock `caddy:2` carries no DNS plugin — so issue the certificate with your own tooling and supply the files.
+
+### Terminating TLS elsewhere
+
+If something in front of GhostDeck already holds the certificate:
+
+```env
+CADDY_HTTPS_BIND=off
+CADDY_HTTP_BIND=10.0.0.5:8080     # address your proxy connects to
+COOKIE_SECURE=true                # not inferred once Caddy stops serving HTTPS
+TRUSTED_PROXIES=10.0.0.0/24       # so login rate limits see the real client address
+```
+
+Without `COOKIE_SECURE=true` the session cookie is sent without `Secure` and no `Strict-Transport-Security` header is set, even though clients reach the proxy over HTTPS.
 
 ## Users and Registration
 
@@ -137,10 +208,10 @@ Idleness comes from the container's network throughput rather than the last page
 
 ## Security Notes
 
-- Workspaces are served from the dashboard origin, so a compromised workspace image can act as the logged-in user. Admins opening someone else's workspace should use a browser profile not signed in to `/admin/`.
+- Workspaces are served from the dashboard origin, so a compromised workspace image can act as the logged-in user.
 - Runtime state — the session database, generated Caddy config and every workspace home directory — lives in `/var/lib/ghostdeck`, created `0700`.
 - GhostDeck publishes no ports itself. Its managed Caddy container publishes `80` and `443`.
-- The default certificate comes from Caddy's internal CA, so browsers warn until you trust it. Point `CADDY_HTTPS_SITE_ADDRESS` at a real hostname for a public certificate.
+- The default certificate comes from Caddy's internal CA, so browsers warn until its root is trusted. See [TLS](#tls).
 - Security events are logged with an `audit event=` prefix — logins and failures, logouts, registrations, password changes, workspace creation and deletion, and every admin action. Values are quoted, so a submitted username cannot forge a line.
 
   ```bash
